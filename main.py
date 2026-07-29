@@ -1,11 +1,22 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from garminconnect import Garmin
 import os
 import time
 import pandas as pd
 
 app = FastAPI()
-CSV_FILE = '/tmp/moje_zaawansowane_dane.csv' # W chmurze zapisujemy w folderze tymczasowym /tmp
+
+# PANCERNE ZABEZPIECZENIE: Zezwolenie na połączenie z telefonem (CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Zezwala na połączenie z dowolnego telefonu/aplikacji
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+CSV_FILE = '/tmp/moje_zaawansowane_dane.csv'
 
 GARMIN_EMAIL = "TWÓJ_EMAIL"
 GARMIN_PASSWORD = "TWOJE_HASŁO"
@@ -14,7 +25,7 @@ def analizuj_dane_i_anomalie():
     if os.path.exists(CSV_FILE):
         df_hist = pd.read_csv(CSV_FILE).dropna(subset=['Tetno_Spoczynkowe']).sort_values('Data')
     else:
-        dane_startowe = {'Data': [time.strftime("%Y-%m-%d")], 'Tetno_Spoczynkowe': [60]}
+        dane_startowe = {'Data': [time.strftime("%Y-%m-%d")], 'Tetno_Spoczynkowe':}
         df_hist = pd.DataFrame(dane_startowe)
         df_hist.to_csv(CSV_FILE, index=False)
 
