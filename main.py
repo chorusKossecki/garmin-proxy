@@ -25,7 +25,7 @@ def analizuj_dane_i_anomalie():
     if os.path.exists(CSV_FILE):
         df_hist = pd.read_csv(CSV_FILE).dropna(subset=['Tetno_Spoczynkowe']).sort_values('Data')
     else:
-        dane_startowe = {'Data': [time.strftime("%Y-%m-%d")], 'Tetno_Spoczynkowe':}
+        dane_startowe = {'Data': [time.strftime("%Y-%m-%d")], 'Tetno_Spoczynkowe': [60]}
         df_hist = pd.DataFrame(dane_startowe)
         df_hist.to_csv(CSV_FILE, index=False)
 
