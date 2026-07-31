@@ -17,11 +17,10 @@ app.add_middleware(
 )
 
 # Ścieżka do trwałego dysku Render (Persistent Disk)
-DATA_DIR = '/opt/render/project/src/data'
 os.makedirs(DATA_DIR, exist_ok=True)
 
-CSV_FILE = os.path.join(DATA_DIR, 'moje_zaawansowane_dane.csv')
-COOKIES_FILE = os.path.join(DATA_DIR, 'garmin_cookies.json')
+CSV_FILE = '/tmp/moje_zaawansowane_dane.csv'
+COOKIES_FILE = '/tmp/garmin_cookies.json'
 
 # Wpisz swoje dane do Garmina
 GARMIN_EMAIL = "w.horodejczuk@gmail.com"
