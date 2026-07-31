@@ -17,8 +17,6 @@ app.add_middleware(
 )
 
 # Ścieżka do trwałego dysku Render (Persistent Disk)
-os.makedirs(DATA_DIR, exist_ok=True)
-
 CSV_FILE = '/tmp/moje_zaawansowane_dane.csv'
 COOKIES_FILE = '/tmp/garmin_cookies.json'
 
