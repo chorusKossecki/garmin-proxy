@@ -1,3 +1,4 @@
+auth = ("API_KEY", INTERVALS_API_KEY)  # <--- Słowo "API_KEY" musi być pisane wielkimi literami!
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
@@ -42,7 +43,7 @@ async def generuj_porade_ai(resting_hr, srednie_hr, czy_anomalia):
 async def get_sport_data():
     dzis = time.strftime("%Y-%m-%d")
     wczoraj = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
-    auth = ("athlete", INTERVALS_API_KEY)
+    auth = ("API_KEY", INTERVALS_API_KEY)  # <--- Słowo "API_KEY" musi być pisane wielkimi literami!
     
     try:
         async with httpx.AsyncClient() as client:
