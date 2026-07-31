@@ -33,13 +33,13 @@ async def get_sport_data():
     try:
         async with httpx.AsyncClient() as client:
             # 1. Próba pobrania danych z dzisiaj (UZUPEŁNIONO PEŁNĄ ŚCIEŻKĘ API)
-            url_dzis = f"https://intervals.icu{INTERVALS_ATHLETE_ID}/wellness/{dzis}"
+            url_dzis = f"https://intervals.icu{dzis}"
             response = await client.get(url_dzis, auth=auth)
             dane = response.json() if response.status_code == 200 else None
             
             # 2. Jeśli dzisiaj jest puste, pobieramy wczoraj (UZUPEŁNIONO PEŁNĄ ŚCIEŻKĘ API)
             if not dane or not dane.get('restingHR'):
-                url_wczoraj = f"https://intervals.icu{INTERVALS_ATHLETE_ID}/wellness/{wczoraj}"
+                url_wczoraj = f"https://intervals.icu{wczoraj}"
                 response = await client.get(url_wczoraj, auth=auth)
                 if response.status_code == 200:
                     dane = response.json()
