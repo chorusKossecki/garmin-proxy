@@ -1,9 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from playwright.sync_api import sync_playwright
-import os
+import httpx
 import time
-import json
+import os
 import pandas as pd
 
 app = FastAPI()
@@ -16,100 +15,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ścieżka do trwałego dysku Render (Persistent Disk)
 CSV_FILE = '/tmp/moje_zaawansowane_dane.csv'
-COOKIES_FILE = '/tmp/garmin_cookies.json'
 
-# Linia 23: Wpisz tutaj swój numer Athlete ID (np. i12345 lub same cyfry)
+# TUTAJ WKLEJASZ SWOJE NOWE DANE Z INTERVALS.ICU (ZAMIAST MAILA I HASŁA GARMINA)
 INTERVALS_ATHLETE_ID = "i659882"  
-
-# Linia 24: Wklej tutaj swój długi, wygenerowany klucz API
 INTERVALS_API_KEY = "26ddnzto5f3iqqmi6m76jrc2n"
 
-
-def analizuj_dane_i_anomalie():
-    if os.path.exists(CSV_FILE):
-        df_hist = pd.read_csv(CSV_FILE).dropna(subset=['Tetno_Spoczynkowe']).sort_values('Data')
-    else:
-        df_hist = pd.DataFrame({'Data': [time.strftime("%Y-%m-%d")], 'Tetno_Spoczynkowe': [55]})
-        df_hist.to_csv(CSV_FILE, index=False)
-
-    if not df_hist.empty:
-        srednie_tetno_hist = df_hist['Tetno_Spoczynkowe'].mean()
-        df_hist['Anomalia_Przemeczenie'] = (df_hist['Tetno_Spoczynkowe'] > (srednie_tetno_hist + 4)).astype(int)
-        ostatni_wiersz = df_hist.iloc[-1].to_dict()
+@app.get("/pobierz-treningi")
+async def get_sport_data():
+    dzis = time.strftime("%Y-%m-%d")
+    url = f"https://intervals.icu{INTERVALS_ATHLETE_ID}/wellness/{dzis}"
+    auth = ("athlete", INTERVALS_API_KEY)
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, auth=auth)
+            
+        if response.status_code == 200:
+            dane = response.json()
+            
+            # Pobieramy tętno spoczynkowe i natlenienie
+            rhr = dane.get('restingHR', 55)
+            spo2 = dane.get('spO2', 98.0)
+            
+            # Zapis do pliku CSV w darmowym folderze /tmp/
+            nowy_wiersz = pd.DataFrame([{'Data': dzis, 'Tetno_Spoczynkowe': rhr, 'Natlenienie': spo2}])
+            if os.path.exists(CSV_FILE):
+                df_obecny = pd.read_csv(CSV_FILE)
+                df_obecny = pd.concat([df_obecny, nowy_wiersz]).drop_duplicates(subset=['Data'], keep='last')
+                df_obecny.to_csv(CSV_FILE, index=False)
+            else:
+                nowy_wiersz.to_csv(CSV_FILE, index=False)
+            
+            # Analiza anomalii
+            df_hist = pd.read_csv(CSV_FILE)
+            srednie_hr = df_hist['Tetno_Spoczynkowe'].mean()
+            czy_anomalia = 1 if rhr > (srednie_hr + 4) else 0
+            
+            return {
+                "srednie_tetno_hist": round(srednie_hr, 1),
+                "tryb": "online",
+                "ostatnie_dane": {
+                    "Anomalia_Przemeczenie": czy_anomalia,
+                    "Natlenienie_Krwi": spo2
+                }
+            }
+        raise Exception(f"Blad API Intervals: {response.status_code}")
+        
+    except Exception as e:
         return {
-            "srednie_tetno_hist": round(srednie_tetno_hist, 1),
+            "srednie_tetno_hist": 55.0,
+            "tryb": "offline_tryb_awaryjny",
+            "log_bledu": str(e),
             "ostatnie_dane": {
-                "Anomalia_Przemeczenie": int(ostatni_wiersz['Anomalia_Przemeczenie'])
+                "Anomalia_Przemeczenie": 0,
+                "Natlenienie_Krwi": 98.0
             }
         }
-    return {"srednie_tetno_hist": 55, "ostatnie_dane": {"Anomalia_Przemeczenie": 0}}
-
-def pobierz_z_garmin_przez_przegladarke():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        )
-
-        if os.path.exists(COOKIES_FILE):
-            with open(COOKIES_FILE, 'r') as f:
-                context.add_cookies(json.load(f))
-
-        page = context.new_page()
-        dzis = time.strftime("%Y-%m-%d")
-        page.goto("https://garmin.com")
-        
-        try:
-            js_script = f"""
-            async () => {{
-                let res = await fetch('https://garmin.com{dzis}');
-                if (res.status === 401 || res.status === 403) return null;
-                return await res.json();
-            }}
-            """
-            dane = page.evaluate(js_script)
-        except Exception:
-            dane = None
-
-        if not dane:
-            page.goto("https://garmin.com")
-            page.wait_for_selector('input[type="email"]')
-            page.fill('input[type="email"]', GARMIN_EMAIL)
-            page.fill('input[type="password"]', GARMIN_PASSWORD)
-            page.click('button[type="submit"]')
-            
-            page.wait_for_url("**/modern/**", timeout=25000)
-
-            with open(COOKIES_FILE, 'w') as f:
-                json.dump(context.cookies(), f)
-
-            dane = page.evaluate(js_script)
-
-        browser.close()
-        return dane
-
-@app.get("/pobierz-treningi")
-def get_garmin_data():
-    dzisiejsza_data = time.strftime("%Y-%m-%d")
-    try:
-        nowe_dane = pobierz_z_garmin_przez_przegladarke()
-        rhr = nowe_dane.get('restingHeartRate', 55) if nowe_dane else 55
-        
-        nowy_wiersz = pd.DataFrame([{'Data': dzisiejsza_data, 'Tetno_Spoczynkowe': rhr}])
-        if os.path.exists(CSV_FILE):
-            df_obecny = pd.read_csv(CSV_FILE)
-            df_obecny = pd.concat([df_obecny, nowy_wiersz]).drop_duplicates(subset=['Data'], keep='last')
-            df_obecny.to_csv(CSV_FILE, index=False)
-        else:
-            nowy_wiersz.to_csv(CSV_FILE, index=False)
-            
-        wynik = analizuj_dane_i_anomalie()
-        wynik["tryb"] = "online"
-        return wynik
-    except Exception as e:
-        wynik_offline = analizuj_dane_i_anomalie()
-        wynik_offline["tryb"] = "offline_tryb_awaryjny"
-        wynik_offline["log_bledu"] = str(e)
-        return wynik_offline
