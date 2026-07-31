@@ -18,8 +18,8 @@ app.add_middleware(
 CSV_FILE = '/tmp/moje_zaawansowane_dane.csv'
 
 # TWOJE KLUCZE Z INTERVALS.ICU
-INTERVALS_ATHLETE_ID = "TWÓJ_SKOPIOWANY_ATHLETE_ID"  
-INTERVALS_API_KEY = "TWÓJ_SKOPIOWANY_API_KEY"
+INTERVALS_ATHLETE_ID = "i659882"  
+INTERVALS_API_KEY = "26ddnzto5f3iqqmi6m76jrc2n"
 
 # KLUCZ GEMINI (Zostaw pusty, jeśli na razie testujesz same liczby)
 GEMINI_API_KEY = ""
