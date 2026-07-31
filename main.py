@@ -20,9 +20,12 @@ app.add_middleware(
 CSV_FILE = '/tmp/moje_zaawansowane_dane.csv'
 COOKIES_FILE = '/tmp/garmin_cookies.json'
 
-# Wpisz swoje dane do Garmina
-GARMIN_EMAIL = "w.horodejczuk@gmail.com"
-GARMIN_PASSWORD = "Juzek1986!(*^"
+# Linia 23: Wpisz tutaj swój numer Athlete ID (np. i12345 lub same cyfry)
+INTERVALS_ATHLETE_ID = "i659882"  
+
+# Linia 24: Wklej tutaj swój długi, wygenerowany klucz API
+INTERVALS_API_KEY = "26ddnzto5f3iqqmi6m76jrc2n"
+
 
 def analizuj_dane_i_anomalie():
     if os.path.exists(CSV_FILE):
