@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from garminconnect import Garmin
+from playwright.sync_api import sync_playwright
 import os
 import time
+import json
 import pandas as pd
 
 app = FastAPI()
@@ -15,43 +16,86 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CSV_FILE = '/tmp/moje_zaawansowane_dane.csv'
-TOKEN_DIR = '/tmp/garmin_tokens' # Miejsce na zapisanie bezpiecznej sesji
+# Ścieżka do trwałego dysku Render (Persistent Disk)
+DATA_DIR = '/opt/render/project/src/data'
+os.makedirs(DATA_DIR, exist_ok=True)
 
-GARMIN_EMAIL = "TWÓJ_EMAIL"
-GARMIN_PASSWORD = "TWOJE_HASŁO"
+CSV_FILE = os.path.join(DATA_DIR, 'moje_zaawansowane_dane.csv')
+COOKIES_FILE = os.path.join(DATA_DIR, 'garmin_cookies.json')
+
+# Wpisz swoje dane do Garmina
+GARMIN_EMAIL = "w.horodejczuk@gmail.com"
+GARMIN_PASSWORD = "Juzek1986!(*^"
 
 def analizuj_dane_i_anomalie():
     if os.path.exists(CSV_FILE):
         df_hist = pd.read_csv(CSV_FILE).dropna(subset=['Tetno_Spoczynkowe']).sort_values('Data')
     else:
-        # Zmieniliśmy domyślną wartość na 55, aby pasowała do Twojego realnego tętna
-        dane_startowe = {'Data': [time.strftime("%Y-%m-%d")], 'Tetno_Spoczynkowe': [55]}
-        df_hist = pd.DataFrame(dane_startowe)
+        df_hist = pd.DataFrame({'Data': [time.strftime("%Y-%m-%d")], 'Tetno_Spoczynkowe': [55]})
         df_hist.to_csv(CSV_FILE, index=False)
 
     if not df_hist.empty:
         srednie_tetno_hist = df_hist['Tetno_Spoczynkowe'].mean()
         df_hist['Anomalia_Przemeczenie'] = (df_hist['Tetno_Spoczynkowe'] > (srednie_tetno_hist + 4)).astype(int)
+        ostatni_wiersz = df_hist.iloc[-1].to_dict()
         return {
-            "status": "success",
             "srednie_tetno_hist": round(srednie_tetno_hist, 1),
-            "ostatnie_dane": df_hist.iloc[-1].to_dict()
+            "ostatnie_dane": {
+                "Anomalia_Przemeczenie": int(ostatni_wiersz['Anomalia_Przemeczenie'])
+            }
         }
-    return {"status": "error", "message": "Brak danych"}
+    return {"srednie_tetno_hist": 55, "ostatnie_dane": {"Anomalia_Przemeczenie": 0}}
+
+def pobierz_z_garmin_przez_przegladarke():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        )
+
+        if os.path.exists(COOKIES_FILE):
+            with open(COOKIES_FILE, 'r') as f:
+                context.add_cookies(json.load(f))
+
+        page = context.new_page()
+        dzis = time.strftime("%Y-%m-%d")
+        page.goto("https://garmin.com")
+        
+        try:
+            js_script = f"""
+            async () => {{
+                let res = await fetch('https://garmin.com{dzis}');
+                if (res.status === 401 || res.status === 403) return null;
+                return await res.json();
+            }}
+            """
+            dane = page.evaluate(js_script)
+        except Exception:
+            dane = None
+
+        if not dane:
+            page.goto("https://garmin.com")
+            page.wait_for_selector('input[type="email"]')
+            page.fill('input[type="email"]', GARMIN_EMAIL)
+            page.fill('input[type="password"]', GARMIN_PASSWORD)
+            page.click('button[type="submit"]')
+            
+            page.wait_for_url("**/modern/**", timeout=25000)
+
+            with open(COOKIES_FILE, 'w') as f:
+                json.dump(context.cookies(), f)
+
+            dane = page.evaluate(js_script)
+
+        browser.close()
+        return dane
 
 @app.get("/pobierz-treningi")
 def get_garmin_data():
     dzisiejsza_data = time.strftime("%Y-%m-%d")
-    os.makedirs(TOKEN_DIR, exist_ok=True)
-    
     try:
-        # Przekazujemy ścieżkę token_store. Python najpierw spróbuje użyć zapisanego tokenu!
-        client = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD, token_store=TOKEN_DIR)
-        client.login() # Jeśli token istnieje, zaloguje natychmiast bez generowania błędu 429
-        
-        nowe_dane = client.get_rhr_and_details(dzisiejsza_data)
-        rhr = nowe_dane.get('restingHeartRate', 55)
+        nowe_dane = pobierz_z_garmin_przez_przegladarke()
+        rhr = nowe_dane.get('restingHeartRate', 55) if nowe_dane else 55
         
         nowy_wiersz = pd.DataFrame([{'Data': dzisiejsza_data, 'Tetno_Spoczynkowe': rhr}])
         if os.path.exists(CSV_FILE):
