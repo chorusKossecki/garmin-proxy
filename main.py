@@ -43,8 +43,8 @@ async def generuj_porade_ai(resting_hr, srednie_hr, czy_anomalia):
 async def get_sport_data():
     dzis = time.strftime("%Y-%m-%d")
     wczoraj = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
-    auth = ("API_KEY", INTERVALS_API_KEY)  # <--- Słowo "API_KEY" musi być pisane wielkimi literami!
-    
+    auth = ("API_KEY", INTERVALS_API_KEY)
+
     try:
         async with httpx.AsyncClient() as client:
             # 1. Próba pobrania danych z dzisiaj
