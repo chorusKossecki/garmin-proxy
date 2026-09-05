@@ -32,12 +32,12 @@ async def get_sport_data():
     
     try:
         async with httpx.AsyncClient() as client:
-            # 1. Proba pobrania danych z dzisiaj (POPRAWIONA ŚCIEŻKA API)
+            # 1. Proba pobrania danych z dzisiaj
             url_dzis = f"https://intervals.icu{INTERVALS_ATHLETE_ID}/wellness/{dzis}"
             response = await client.get(url_dzis, auth=auth)
             dane = response.json() if response.status_code == 200 else None
             
-            # 2. Jesli dzisiaj jest puste, pobieramy wczoraj (POPRAWIONA ŚCIEŻKA API)
+            # 2. Jesli dzisiaj jest puste, pobieramy wczoraj
             if not dane or not dane.get('restingHR'):
                 url_wczoraj = f"https://intervals.icu{INTERVALS_ATHLETE_ID}/wellness/{wczoraj}"
                 response = await client.get(url_wczoraj, auth=auth)
@@ -47,6 +47,10 @@ async def get_sport_data():
         if dane:
             rhr = dane.get('restingHR', 55)
             spo2 = dane.get('spO2', 98.0)
+            
+            # Zabezpieczenie wartości przed None
+            if rhr is None: rhr = 55
+            if spo2 is None: spo2 = 98.0
             
             # Zapis do pliku CSV
             nowy_wiersz = pd.DataFrame([{'Data': dzis, 'Tetno_Spoczynkowe': rhr, 'Natlenienie': spo2}])
@@ -60,25 +64,31 @@ async def get_sport_data():
             # Analiza anomalii
             df_hist = pd.read_csv(CSV_FILE)
             srednie_hr = df_hist['Tetno_Spoczynkowe'].mean()
-            czy_anomalia = 1 if rhr > (srednie_hr + 4) else 0
+            
+            # Zabezpieczenie przed wartością NaN, jeśli plik był pusty
+            if pd.isna(srednie_hr):
+                srednie_hr = float(rhr)
+                
+            czy_anomalia = 1.0 if rhr > (srednie_hr + 4) else 0.0
             
             return {
-                "srednie_tetno_hist": round(srednie_hr, 1),
+                "srednie_tetno_hist": float(round(srednie_hr, 1)),
                 "tryb": "online",
                 "ostatnie_dane": {
-                    "Anomalia_Przemeczenie": czy_anomalia,
-                    "Natlenienie_Krwi": spo2
+                    "Anomalia_Przemeczenie": float(czy_anomalia),
+                    "Natlenienie_Krwi": float(spo2)
                 }
             }
         raise Exception("Brak danych wellness na dzis i wczoraj.")
         
     except Exception as e:
+        # Blok awaryjny - tutaj również wymuszamy typ float (z kropką), aby Flutter się nie wysypał
         return {
             "srednie_tetno_hist": 55.0,
             "tryb": "offline_tryb_awaryjny",
             "log_bledu": str(e),
             "ostatnie_dane": {
-                "Anomalia_Przemeczenie": 0,
+                "Anomalia_Przemeczenie": 0.0,
                 "Natlenienie_Krwi": 98.0
             }
         }
